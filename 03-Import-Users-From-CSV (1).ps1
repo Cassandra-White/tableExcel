@@ -97,24 +97,9 @@ $SecurePassword = ConvertTo-SecureString $DefaultPassword -AsPlainText -Force
 # DN de l'OU racine BillU - tous les chemins s'appuient dessus
 $RootDN = "OU=$RootOU,$DomainDN"
 
-# Index de resolution rapide (construit une seule fois au demarrage)
-$DeptIndex    = @{}   # cle normalise -> hashtable Dept complet
-$ServiceIndex = @{}   # cle dept      -> { cle service -> OUName service }
-$DeptGroupMap = @{}   # cle dept      -> nom du groupe GG_..._Users
-
-foreach ($Dept in $Departements) {
-    $dk = Normalize-Text $Dept.CSVName
-    $DeptIndex[$dk]    = $Dept
-    $DeptGroupMap[$dk] = "GG_$($Dept.GroupCode)_Users"
-    $ServiceIndex[$dk] = @{}
-    foreach ($Svc in $Dept.Services) {
-        $sk = Normalize-Text $Svc.CSVName
-        $ServiceIndex[$dk][$sk] = $Svc.OUName
-    }
-}
-
 # ============================================================================
-# FONCTIONS
+# FONCTIONS UTILITAIRES
+# Declarees ici, avant tout appel, car utilisees des l'initialisation des index
 # ============================================================================
 
 function Write-Log {
@@ -149,6 +134,30 @@ function Normalize-Text {
     $Text = $Text -replace '[éèêë]','e' -replace '[àâä]','a' -replace '[ôö]','o'
     $Text = $Text -replace '[ùûü]','u'  -replace '[ç]','c'   -replace '[ïî]','i'
     return $Text.ToLower().Trim()
+}
+
+# ============================================================================
+# INDEX DE RESOLUTION RAPIDE
+# Construit apres les fonctions utilitaires (Normalize-Text doit etre definie)
+# ============================================================================
+
+# $DeptIndex    : cle normalisee -> hashtable Dept complet
+# $ServiceIndex : cle dept       -> { cle service -> OUName service }
+# $DeptGroupMap : cle dept       -> nom du groupe GG_..._Users
+
+$DeptIndex    = @{}
+$ServiceIndex = @{}
+$DeptGroupMap = @{}
+
+foreach ($Dept in $Departements) {
+    $dk = Normalize-Text $Dept.CSVName
+    $DeptIndex[$dk]    = $Dept
+    $DeptGroupMap[$dk] = "GG_$($Dept.GroupCode)_Users"
+    $ServiceIndex[$dk] = @{}
+    foreach ($Svc in $Dept.Services) {
+        $sk = Normalize-Text $Svc.CSVName
+        $ServiceIndex[$dk][$sk] = $Svc.OUName
+    }
 }
 
 function Clean-CSVValue {
