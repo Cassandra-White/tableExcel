@@ -168,13 +168,29 @@ function Clean-CSVValue {
 }
 
 function Get-UniqueLogin {
-    # Genere un login unique prenom.nom en ASCII avec suffixe numerique si doublon
     param([string]$Prenom, [string]$Nom)
-    $Base  = "$(Remove-Accents $Prenom).$(Remove-Accents $Nom)" -replace '[^a-z0-9.]',''
-    $Login = $Base; $i = 2
+
+    # Nettoyer prénom et nom (ASCII, minuscules, sans caractères spéciaux)
+    $CleanPrenom = (Remove-Accents $Prenom) -replace '[^a-z0-9]',''
+    $CleanNom    = (Remove-Accents $Nom)    -replace '[^a-z0-9]',''
+
+    # Prendre les 3 premières lettres du prénom (si possible)
+    $PrenomPart = $CleanPrenom.Substring(0, [Math]::Min(3, $CleanPrenom.Length))
+
+    # Prendre les lettres du nom pour compléter jusqu'à 20 caractères max
+    $NomPart = $CleanNom.Substring(0, [Math]::Min(20 - $PrenomPart.Length, $CleanNom.Length))
+
+    # Construire la base du login
+    $Base = $PrenomPart + $NomPart
+
+    # Vérifier si le login existe déjà, ajouter un suffixe si nécessaire
+    $Login = $Base
+    $i = 2
     while (Get-ADUser -Filter "SamAccountName -eq '$Login'" -ErrorAction SilentlyContinue) {
-        $Login = "$Base$i"; $i++
+        $Login = $Base + $i
+        $i++
     }
+
     return $Login
 }
 
