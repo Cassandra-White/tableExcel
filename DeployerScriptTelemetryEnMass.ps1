@@ -5,7 +5,7 @@ $postes = Get-ADComputer -Filter * `
 
 # Exécute le script sur chacun en parallèle
 Invoke-Command -ComputerName $postes `
-    -FilePath "\\DC1\NETLOGON\scripts\Disable-Telemetry.ps1" `
+    -FilePath "\\billu.local\NETLOGON\scripts\Disable-Telemetry.ps1" `
     -ThrottleLimit 10   # Max 10 connexions simultanées
 
 Write-Host "Script déployé sur $($postes.Count) postes" -ForegroundColor Green
