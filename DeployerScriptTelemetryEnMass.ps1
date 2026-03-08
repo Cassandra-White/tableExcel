@@ -1,11 +1,36 @@
-# Récupère tous les postes Windows de l'OU Postes
-$postes = Get-ADComputer -Filter * `
-    -SearchBase "DC=billu,DC=local" |
-    Select-Object -ExpandProperty Name
+# 1. Récupération des postes
+$postes = Get-ADComputer -Filter * -SearchBase "DC=billu,DC=local" | Select-Object -ExpandProperty Name
 
-# Exécute le script sur chacun en parallèle
-Invoke-Command -ComputerName $postes `
-    -FilePath "\\billu.local\NETLOGON\scripts\Disable-Telemetry.ps1" `
-    -ThrottleLimit 10   # Max 10 connexions simultanées
+# 2. Préparation des listes pour le rapport
+$success = @()
+$failed = @()
 
-Write-Host "Script déployé sur $($postes.Count) postes" -ForegroundColor Green
+Write-Host "Début du déploiement sur $($postes.Count) postes..." -ForegroundColor Cyan
+
+# 3. Exécution avec gestion d'erreurs
+foreach ($pc in $postes) {
+    try {
+        # Test si le PC répond au ping avant de tenter la commande
+        if (Test-Connection -ComputerName $pc -Count 1 -Quiet) {
+            Invoke-Command -ComputerName $pc -FilePath "\\billu.local\NETLOGON\Disable-Telemetry.ps1" -ErrorAction Stop
+            $success += $pc
+            Write-Host "[OK] $pc" -ForegroundColor Green
+        } else {
+            throw "Hors ligne (Ping échoué)"
+        }
+    } catch {
+        $failed += [PSCustomObject]@{ Poste = $pc; Erreur = $_.Exception.Message }
+        Write-Host "[ERREUR] $pc : $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# 4. Résumé final
+Write-Host "`n--- RÉSUMÉ DU DÉPLOIEMENT ---" -ForegroundColor Yellow
+Write-Host "Succès : $($success.Count)" -ForegroundColor Green
+Write-Host "Échecs : $($failed.Count)" -ForegroundColor Red
+
+# Optionnel : Exporter les échecs dans un fichier pour corriger plus tard
+if ($failed.Count -gt 0) {
+    $failed | Export-Csv -Path "C:\Users\Administrateur\Documents\Echecs_Telemetry.csv" -NoTypeInformation -Encoding utf8
+    Write-Host "La liste des erreurs a été enregistrée dans Documents\Echecs_Telemetry.csv"
+}
