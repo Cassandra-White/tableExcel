@@ -1,19 +1,17 @@
 # Requires -RunAsAdministrator
 ###########################################################
-# New-UserFolders.ps1
+# New-UserFolders-Debug.ps1
 # BillU - Groupe 1 - Sprint 4
-# But : Créer un dossier individuel pour chaque user AD
-#       et configurer les permissions NTFS (SYSTEM, Admins, User)
 ###########################################################
 
-$ErrorActionPreference = 'Stop' # On passe en 'Stop' pour que le catch attrape tout proprement
+$ErrorActionPreference = 'Stop' # Crucial pour que chaque erreur soit capturée immédiatement
 
 $baseDir      = 'E:\Partages\Utilisateurs'
 $ouPath       = 'OU=Utilisateurs,OU=Paris,OU=France,OU=BillU,DC=billu,DC=local'
 $logFile      = 'C:\Windows\Logs\BillU\NewUserFolders.log'
 $adminGroup   = 'BUILTIN\Administrators'
 $systemAcc    = 'NT AUTHORITY\SYSTEM'
-$targetAdGroup = 'GROUPE_ADMIN' # Nom du groupe dans l'AD
+$targetAdGroup = 'GROUPE_ADMIN'
 
 # --- Initialisation du Log ---
 if (-not (Test-Path (Split-Path $logFile))) {
@@ -26,77 +24,81 @@ function Write-Log($msg, $lvl = 'INFO') {
     Write-Host $line
 }
 
-# --- Vérification du Groupe AD ---
+# --- ÉTAPE 0 : Vérification du Groupe AD ---
 try {
+    $currentStep = "Vérification de l'existence du groupe AD ($targetAdGroup)"
     $adGroupObj = Get-ADGroup -Identity $targetAdGroup -ErrorAction Stop
-    Write-Log "Groupe AD identifié : $($adGroupObj.DistinguishedName)" 'OK'
+    Write-Log "Groupe AD '$targetAdGroup' trouvé (SID: $($adGroupObj.SID))" 'OK'
 } catch {
-    Write-Log "ERREUR FATALE : Le groupe AD '$targetAdGroup' est introuvable. Vérifiez l'orthographe." 'ERROR'
+    Write-Log "ERREUR CRITIQUE [$currentStep] : $($_.Exception.Message)" 'ERROR'
     exit 1
 }
 
-# --- Récupération des utilisateurs ---
+# --- ÉTAPE 1 : Récupération des utilisateurs ---
 try {
+    $currentStep = "Lecture de l'OU dans l'Active Directory"
     $users = Get-ADUser -Filter * -SearchBase $ouPath -Properties SamAccountName, Enabled, SID |
              Where-Object { $_.Enabled -eq $true }
-    Write-Log "=== Début traitement pour $($users.Count) utilisateurs ==="
+    Write-Log "Début du traitement pour $($users.Count) utilisateurs." 'INFO'
 } catch {
-    Write-Log "Impossible de lire l'OU : $ouPath" 'ERROR'
+    Write-Log "ERREUR CRITIQUE [$currentStep] : $($_.Exception.Message)" 'ERROR'
     exit 1
 }
 
-# --- Boucle de création ---
+# --- BOUCLE PRINCIPALE ---
 foreach ($user in $users) {
     $login  = $user.SamAccountName
     $folder = Join-Path $baseDir $login
-
-    # 1. Création du dossier
-    if (-not (Test-Path $folder)) {
-        try {
-            New-Item -Path $folder -ItemType Directory -Force | Out-Null
-            Write-Log "Dossier créé : $folder" 'OK'
-        } catch {
-            Write-Log "Échec création dossier $folder : $($_.Exception.Message)" 'ERROR'
-            continue
-        }
-    }
-
-    # 2. Configuration des permissions
+    
     try {
-        $acl = Get-Acl -Path $folder
-        $acl.SetAccessRuleProtection($true, $false) # Désactive l'héritage
-        $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) } | Out-Null # Nettoyage
-
-        # Fonction interne pour simplifier l'ajout de règles
-        $AddRule = {
-            param($Identity, $AclObj)
-            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-                $Identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-            $AclObj.AddAccessRule($rule)
+        # --- ÉTAPE 2 : Création du dossier ---
+        $currentStep = "Création physique du dossier ($folder)"
+        if (-not (Test-Path $folder)) {
+            New-Item -Path $folder -ItemType Directory -Force | Out-Null
+            Write-Log "Dossier créé pour $login" 'OK'
         }
 
-        # Application des 4 piliers de sécurité
-        Write-Log "Application des permissions pour $login..." 'DEBUG'
-        
-        # SYSTEM
-        &$AddRule $systemAcc $acl
-        
-        # Administrateurs Locaux
-        &$AddRule $adminGroup $acl
-        
-        # Groupe AD Administrateurs (via SID pour éviter l'erreur de traduction)
-        &$AddRule $adGroupObj.SID $acl
-        
-        # L'utilisateur lui-même (via SID)
-        &$AddRule $user.SID $acl
+        # --- ÉTAPE 3 : Préparation de l'ACL ---
+        $currentStep = "Initialisation de l'ACL (Get-Acl / Heritage)"
+        $acl = Get-Acl -Path $folder
+        $acl.SetAccessRuleProtection($true, $false) # Casse l'héritage
+        $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) } | Out-Null # Purge
 
-        # Enregistrement final des droits
+        # --- ÉTAPE 4 : Ajout SYSTEM ---
+        $currentStep = "Attribution des droits : SYSTEM"
+        $ruleSystem = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $systemAcc, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($ruleSystem)
+
+        # --- ÉTAPE 5 : Ajout ADMINS LOCAUX ---
+        $currentStep = "Attribution des droits : Administrateurs Locaux"
+        $ruleAdmin = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $adminGroup, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($ruleAdmin)
+
+        # --- ÉTAPE 6 : Ajout GROUPE AD ADMIN ---
+        $currentStep = "Attribution des droits : Groupe AD ($targetAdGroup)"
+        $ruleAdAdmin = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $adGroupObj.SID, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($ruleAdAdmin)
+
+        # --- ÉTAPE 7 : Ajout UTILISATEUR CIBLE ---
+        $currentStep = "Attribution des droits : Utilisateur ($login)"
+        $ruleUser = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $user.SID, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($ruleUser)
+
+        # --- ÉTAPE 8 : Application finale de l'ACL ---
+        $currentStep = "Écriture finale de l'ACL sur le disque (Set-Acl)"
         Set-Acl -Path $folder -AclObject $acl
-        Write-Log "Permissions NTFS configurées avec succès pour $login" 'OK'
+        
+        Write-Log "Succès total pour $login" 'SUCCESS'
 
     } catch {
-        Write-Log "ERREUR NTFS sur $login : $($_.Exception.Message)" 'ERROR'
+        # Ici, le log te dira exactement quelle étape a échoué via $currentStep
+        Write-Log "ÉCHEC pour l'utilisateur $login | Étape : [$currentStep] | Message : $($_.Exception.Message)" 'ERROR'
+        continue # Passe à l'utilisateur suivant même si celui-ci a échoué
     }
 }
 
-Write-Log "=== Fin du script ==="
+Write-Log "=== Fin du script de maintenance ==="
