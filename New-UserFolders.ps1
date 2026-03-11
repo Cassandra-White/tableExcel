@@ -8,7 +8,7 @@
 
 $ErrorActionPreference = 'Continue'
 
-$baseDir   = 'D:\Partages\Utilisateurs'
+$baseDir   = 'E:\Partages\Utilisateurs'
 $ouPath    = 'OU=Utilisateurs,OU=Paris,OU=France,OU=BillU,DC=billu,DC=local'
 $logFile   = 'C:\Windows\Logs\BillU\NewUserFolders.log'
 $adminGroup = 'BUILTIN\Administrators'
