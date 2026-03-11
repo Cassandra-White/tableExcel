@@ -51,39 +51,35 @@ foreach ($user in $users) {
 
     # Configurer les permissions NTFS
     try {
-        # Charge l'ACL actuelle du dossier
         $acl = Get-Acl -Path $folder
-
-        # Desactiver l'heritage et supprimer les permissions heritees
         $acl.SetAccessRuleProtection($true, $false)
-
-        # Supprimer toutes les entrees existantes (repartir de zero)
         $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) } | Out-Null
 
-        # Ajouter SYSTEM avec Controle total
+        # 1. SYSTEM
         $ruleSystem = New-Object System.Security.AccessControl.FileSystemAccessRule(
             $systemAcc, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
         $acl.AddAccessRule($ruleSystem)
 
-        # Ajouter les Admins avec Controle total
+        # 2. Admins Locaux
         $ruleAdmin = New-Object System.Security.AccessControl.FileSystemAccessRule(
             $adminGroup, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
         $acl.AddAccessRule($ruleAdmin)
 
-        # Ajouter l'utilisateur avec Controle total sur son propre dossier
-        $domainUser = "BILLU\$login"
+        # 3. Ton groupe AD (On utilise le SID pour être sûr)
+        $adGroupObj = Get-ADGroup -Identity "GROUPE_ADMIN"
+        $ruleAdAdmin = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $adGroupObj.SID, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($ruleAdAdmin)
+
+        # 4. L'utilisateur (On utilise son SID pour éviter l'erreur de traduction)
         $ruleUser = New-Object System.Security.AccessControl.FileSystemAccessRule(
-            $domainUser, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+            $user.SID, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
         $acl.AddAccessRule($ruleUser)
 
-        # Ajouter le groupe GROUPE_ADMIN de l'AD avec Controle total
-      $ruleAdAdmin = New-Object System.Security.AccessControl.FileSystemAccessRule(
-          $adAdminGroup, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-      $acl.AddAccessRule($ruleAdAdmin)
-
-        # Appliquer l'ACL au dossier
         Set-Acl -Path $folder -AclObject $acl
-        Write-Log "Permissions NTFS configurees pour $login" 'OK'
+        Write-Log "Permissions NTFS OK pour $login" 'OK'
+    } catch {
+        Write-Log "Erreur permissions $login : $($_.Exception.Message)" 'ERROR'
     } catch {
         Write-Log "Erreur permissions $login : $_" 'ERROR'
     }
