@@ -5,10 +5,12 @@
 # lvm2 : gestion volumes logiques (Obj.3)
 # mdadm : RAID logiciel (Obj.2)
 # rsync : sauvegarde incrementielle (Obj.4)
-apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y \
+
+apt-get update
+
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     samba winbind libnss-winbind libpam-winbind \
     krb5-user smbclient \
     acl attr \
     lvm2 mdadm \
-    rsync ntp net-tools curl
+    rsync chrony net-tools curl
