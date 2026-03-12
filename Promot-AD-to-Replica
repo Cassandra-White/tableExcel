@@ -1,0 +1,27 @@
+#Requires -RunAsAdministrator
+# Promote-DC2.ps1 -- BillU Sprint 5
+# Installe AD DS et promeut DC2 en replica de billu.local
+# Credential : BILLU\Administrateur / Azerty1*
+
+$DomainName = "billu.local"
+$AdminPass  = ConvertTo-SecureString "Azerty1*" -AsPlainText -Force
+$AdminCred  = New-Object System.Management.Automation.PSCredential("BILLU\Administrateur", $AdminPass)
+$SafePass   = $AdminPass  # MDP DSRM (mode restauration AD)
+
+# Installer le role AD DS
+Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
+Write-Host "[OK] Role AD DS installe"
+
+# Promouvoir DC2 en replica de billu.local
+# -NoRebootOnCompletion:$false = redemarrage automatique apres promotion
+Install-ADDSDomainController `
+    -DomainName $DomainName `
+    -Credential $AdminCred `
+    -SafeModeAdministratorPassword $SafePass `
+    -InstallDns:$true `
+    -ReplicationSourceDC "dc1.billu.local" `
+    -SiteName "Default-First-Site-Name" `
+    -NoRebootOnCompletion:$false `
+    -Force:$true
+
+Write-Host "[OK] DC2 promu -- redemarrage en cours..."
