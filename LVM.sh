@@ -7,9 +7,9 @@ VG="vg-billu-data"
 pvcreate /dev/sdb /dev/sdc
 vgcreate "$VG" /dev/sdb /dev/sdc
 
-lvcreate -n lv-partages -L 4G  "$VG"   # Dossiers J: et K:
-lvcreate -n lv-homes    -L 4G  "$VG"   # Dossiers I:
-lvcreate -n lv-backup   -L 10G  "$VG"   # Sauvegarde rsync (Obj.4)
+lvcreate -n lv-partages -L 10G  "$VG"   # Dossiers J: et K:
+lvcreate -n lv-homes    -L 10G  "$VG"   # Dossiers I:
+lvcreate -n lv-backup   -L 20G  "$VG"   # Sauvegarde rsync (Obj.4)
 
 mkfs.ext4 -q /dev/vg-billu-data/lv-partages
 mkfs.ext4 -q /dev/vg-billu-data/lv-homes
