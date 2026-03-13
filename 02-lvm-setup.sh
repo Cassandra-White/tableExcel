@@ -29,11 +29,11 @@ vgdisplay   # Verifier -- tu dois voir ~190G disponibles
 echo ""
 echo "=== Etape 3 : Creer les Logical Volumes (LV) ==="
 # lv-data : donnees partagees (80G)
-lvcreate -n lv-data   -L 80G  vg-billu-data
+lvcreate -n lv-data   -L 5G  vg-billu-data
 # lv-homes : dossiers personnels (50G)
-lvcreate -n lv-homes  -L 50G  vg-billu-data
+lvcreate -n lv-homes  -L 5G  vg-billu-data
 # lv-backup : sauvegarde sur disque different (50G)
-lvcreate -n lv-backup -L 50G  vg-billu-data
+lvcreate -n lv-backup -L 10G  vg-billu-data
 lvdisplay   # Verifier
 
 echo ""
