@@ -1,0 +1,13 @@
+# Tenter de charger le module -- si pas d erreur = installe correctement
+Import-Module AdmPwd.PS -ErrorAction Stop
+Write-Host "[OK] Module LAPS (AdmPwd.PS) charge"
+
+# Lister les commandes disponibles
+Get-Command -Module AdmPwd.PS
+
+# Verifier les templates GPO (ADMX)
+if (Test-Path "C:\Windows\PolicyDefinitions\AdmPwd.admx") {
+    Write-Host "[OK] Template ADMX LAPS present"
+} else {
+    Write-Host "[ERREUR] AdmPwd.admx manquant -- reinstaller LAPS avec Management Tools"
+}
