@@ -1,0 +1,13 @@
+$ouPC = "OU=Ordinateurs,OU=Paris,OU=France,OU=BillU,DC=billu,DC=local"
+
+Write-Host "Configuration de redircmp..."
+$result = & redircmp $ouPC 2>&1
+Write-Host $result
+
+# Verifier la configuration
+$domDN = (Get-ADDomain).DistinguishedName
+$wellKnown = Get-ADObject -Identity "CN=Computers,$domDN" -Properties wellKnownObjects
+Write-Host ""
+Write-Host "=== Verification ==="
+Write-Host "OU cible de redircmp : $ouPC"
+Write-Host "Les prochains PC qui rejoignent le domaine iront dans OU=Ordinateurs"
