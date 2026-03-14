@@ -1,0 +1,17 @@
+# Verifier qu un user a bien ses restrictions
+$u = Get-ADUser "prenom.nom" -Properties logonHours
+if ($u.logonHours) {
+    Write-Host "[OK] logonHours configure sur $($u.SamAccountName)"
+    Write-Host "     21 octets : $($u.logonHours -join ', ')"
+} else {
+    Write-Host "[ERREUR] logonHours vide -- relancer le script 15"
+}
+
+# Verifier qu un admin est bien en bypass (logonHours = tout a 0xFF)
+$a = Get-ADUser "Administrateur" -Properties logonHours
+$isBypass = ($a.logonHours | Where-Object { $_ -ne 0xFF }).Count -eq 0
+Write-Host "Administrateur en bypass : $isBypass"
+
+# Voir les taches planifiees BillU
+Get-ScheduledTask | Where-Object { $_.TaskName -like "BillU-*" } |
+    Format-Table TaskName, State, @{N="Prochaine";E={$_.NextRunTime}}
