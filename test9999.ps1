@@ -17,3 +17,26 @@ Get-GPO -Name "BillU-LecteursReseau"| Select-Object DisplayName, GpoStatus
 # Voir les liens de chaque GPO
 Get-GPOReport -Name "BillU-Bureau"         -ReportType Xml | Select-String "LinksTo"
 Get-GPOReport -Name "BillU-LecteursReseau" -ReportType Xml | Select-String "LinksTo"
+
+
+
+
+
+
+
+# Voir la valeur Run configurée dans BillU-LecteursReseau
+Get-GPRegistryValue -Name "BillU-LecteursReseau" `
+    -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" `
+    -ValueName "BillU-MapDrives" | Select-Object Value
+
+
+
+# Corriger avec le bon chemin (sans \scripts\)
+Set-GPRegistryValue -Name "BillU-LecteursReseau" `
+    -Key   "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" `
+    -ValueName "BillU-MapDrives" `
+    -Type  String `
+    -Value "powershell.exe -ExecutionPolicy Bypass -NonInteractive -WindowStyle Hidden -File `"\\billu.local\NETLOGON\Map-Drives-BillU.ps1`""
+
+
+    
