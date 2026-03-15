@@ -39,7 +39,7 @@ if ($isServer) {
         @{ Name="RSAT-DNS-Server"; Desc="Outils DNS" },
         @{ Name="RSAT-DHCP"; Desc="Outils DHCP" },
         @{ Name="RSAT-GP-Tools"; Desc="Gestion des strategies de groupe (GPMC)" },
-        @{ Name="RSAT-File-Services"; Desc="Outils services de fichiers" },
+        @{ Name="RSAT-File-Services"; Desc="Outils services de fichiers" }
     )
 
     $ok = 0; $err = 0; $deja = 0
@@ -102,7 +102,7 @@ else {
         @{ Name="Rsat.Dns.Tools~~~~0.0.1.0"; Desc="Outils DNS" },
         @{ Name="Rsat.DHCP.Tools~~~~0.0.1.0"; Desc="Outils DHCP" },
         @{ Name="Rsat.FileServices.Tools~~~~0.0.1.0"; Desc="Outils services de fichiers" },
-        @{ Name="Rsat.RemoteDesktop.Services.Tools~~~~0.0.1.0"; Desc="Outils Bureau a distance" },
+        @{ Name="Rsat.RemoteDesktop.Services.Tools~~~~0.0.1.0"; Desc="Outils Bureau a distance" }
     )
 
     $ok = 0; $err = 0; $deja = 0
