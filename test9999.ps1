@@ -8,3 +8,12 @@ $guid = $g.Id.ToString("B")
 $xml = "C:\Windows\SYSVOL\sysvol\billu.local\Policies\$guid\User\Preferences\Files\Files.xml"
 Test-Path $xml   # doit retourner True
 Get-Content $xml # doit afficher le XML avec le chemin du bat
+
+
+# Vérifier où sont liées les 2 GPOs
+Get-GPO -Name "BillU-Bureau"        | Select-Object DisplayName, GpoStatus
+Get-GPO -Name "BillU-LecteursReseau"| Select-Object DisplayName, GpoStatus
+
+# Voir les liens de chaque GPO
+Get-GPOReport -Name "BillU-Bureau"         -ReportType Xml | Select-String "LinksTo"
+Get-GPOReport -Name "BillU-LecteursReseau" -ReportType Xml | Select-String "LinksTo"
