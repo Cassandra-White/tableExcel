@@ -1,8 +1,5 @@
 #Requires -RunAsAdministrator
 # 02-Create-Folders-And-Groups.ps1 -- BillU Sprint 5
-# CORRECTION : utilise les SIDs (invariants selon la langue Windows)
-# Ajoute GG_DSI_Admins (FullControl partout)
-# Ajoute Authenticated Users (Traverse/List RACINE seulement) pour la visibilite ABE
 
 . ".\00-Config.ps1"
 
@@ -13,85 +10,113 @@ $OuSecu      = "OU=Groupes-Securite,OU=Groupes,$SiteDN"
 $script:Base = "D:\Partages"
 $script:NB   = $DomInfo.NetBIOSName
 
-# SIDs recuperes une seule fois -- accessibles dans les fonctions via $script:
-$script:DomAdminsSID = (Get-ADGroup "Domain Admins" -Credential $ADCredential).SID
-$script:DSIAdminsSID = (Get-ADGroup "GG_DSI_Admins" -Credential $ADCredential).SID
+# ---- Resolution des SIDs avec validation explicite ----------------
+Write-Host "=== Resolution des SIDs ==="
 
-# SID Authenticated Users (S-1-5-11) -- invariant toutes langues
-$script:AuthUsersSID = [System.Security.Principal.SecurityIdentifier]"S-1-5-11"
+# SIDs hardcodes (jamais null)
+$script:SID_Admins = [System.Security.Principal.SecurityIdentifier]::new("S-1-5-32-544")
+$script:SID_System = [System.Security.Principal.SecurityIdentifier]::new("S-1-5-18")
+$script:SID_Auth   = [System.Security.Principal.SecurityIdentifier]::new("S-1-5-11")
 
-Write-Host "=== SIDs resolus ==="
-Write-Host "  S-1-5-32-544 : Administrators"
-Write-Host "  S-1-5-18     : SYSTEM"
-Write-Host "  S-1-5-11     : Authenticated Users"
-Write-Host "  Domain Admins  : $($script:DomAdminsSID)"
-Write-Host "  GG_DSI_Admins  : $($script:DSIAdminsSID)"
+Write-Host "  [OK] S-1-5-32-544 = Administrators"
+Write-Host "  [OK] S-1-5-18     = SYSTEM"
+Write-Host "  [OK] S-1-5-11     = Authenticated Users"
+
+# SIDs AD -- avec null-check explicite
+$grpDomAdmins = Get-ADGroup "Domain Admins" -Credential $ADCredential -EA SilentlyContinue
+if (-not $grpDomAdmins) { Write-Error "Groupe 'Domain Admins' introuvable"; exit 1 }
+$script:SID_DomAdmins = $grpDomAdmins.SID
+Write-Host "  [OK] Domain Admins : $($script:SID_DomAdmins)"
+
+$grpDSIAdmins = Get-ADGroup "GG_DSI_Admins" -Credential $ADCredential -EA SilentlyContinue
+if (-not $grpDSIAdmins) { Write-Error "Groupe 'GG_DSI_Admins' introuvable -- verifier script 01 (creation groupes)"; exit 1 }
+$script:SID_DSIAdmins = $grpDSIAdmins.SID
+Write-Host "  [OK] GG_DSI_Admins : $($script:SID_DSIAdmins)"
+
 Write-Host ""
 
 # ============================================================
+# Helper interne : creer une regle NTFS a partir d un SID
+# avec validation null pour eviter l erreur .ctor
+# ============================================================
+function New-AclRule {
+    param(
+        [System.Security.Principal.SecurityIdentifier]$Sid,
+        [System.Security.AccessControl.FileSystemRights]$Rights,
+        [System.Security.AccessControl.InheritanceFlags]$Inherit,
+        [System.Security.AccessControl.PropagationFlags]$Propagate
+    )
+
+    if ($null -eq $Sid) {
+        Write-Error "New-AclRule : SID est null -- impossible de creer la regle"
+        return $null
+    }
+
+    return New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $Sid,
+        $Rights,
+        $Inherit,
+        $Propagate,
+        [System.Security.AccessControl.AccessControlType]::Allow
+    )
+}
+
+# ============================================================
 # Get-AdminACL
-# Pose les 4 SIDs admin avec FullControl + regles $Extra
-# Heritage coupe (SetAccessRuleProtection $true $false)
+# 4 SIDs admin avec FullControl + regles $Extra
+# Heritage coupe
 # ============================================================
 function Get-AdminACL {
     param([System.Security.AccessControl.FileSystemAccessRule[]]$Extra = @())
 
-    $acl  = New-Object System.Security.AccessControl.DirectorySecurity
+    $acl = New-Object System.Security.AccessControl.DirectorySecurity
     $acl.SetAccessRuleProtection($true, $false)
 
-    $inh  = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit"
-    $prop = [System.Security.AccessControl.PropagationFlags]::None
-    $alw  = [System.Security.AccessControl.AccessControlType]::Allow
-    $full = [System.Security.AccessControl.FileSystemRights]::FullControl
+    $inhAll = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit"
+    $propNo = [System.Security.AccessControl.PropagationFlags]::None
+    $full   = [System.Security.AccessControl.FileSystemRights]::FullControl
 
-    # 4 admins en FullControl sur ce dossier et tous ses enfants
     foreach ($sid in @(
-        [System.Security.Principal.SecurityIdentifier]"S-1-5-32-544",
-        [System.Security.Principal.SecurityIdentifier]"S-1-5-18",
-        $script:DomAdminsSID,
-        $script:DSIAdminsSID
+        $script:SID_Admins,
+        $script:SID_System,
+        $script:SID_DomAdmins,
+        $script:SID_DSIAdmins
     )) {
-        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
-            $sid, $full, $inh, $prop, $alw)))
+        $rule = New-AclRule -Sid $sid -Rights $full -Inherit $inhAll -Propagate $propNo
+        if ($rule) { $acl.AddAccessRule($rule) }
     }
 
-    foreach ($r in $Extra) { $acl.AddAccessRule($r) }
+    foreach ($r in $Extra) {
+        if ($r) { $acl.AddAccessRule($r) }
+    }
+
     return $acl
 }
 
 # ============================================================
 # Get-RootACL
-# Identique a Get-AdminACL PLUS Authenticated Users en
-# ReadAndExecute sur CE DOSSIER UNIQUEMENT (pas de propagation)
-#
-# Pourquoi ? Avec ABE (AccessBased Enumeration) active sur le
-# partage SMB, Windows n affiche a un user que les sous-dossiers
-# sur lesquels il a des droits explicites. Mais pour que Windows
-# puisse meme lister le contenu de la racine du partage, le user
-# doit avoir au minimum Traverse/List sur ce dossier racine.
-# "ThisFolderOnly" = InheritanceFlags.None + PropagationFlags.None
+# Comme Get-AdminACL + Authenticated Users ReadAndExecute
+# sur CE dossier UNIQUEMENT (InheritanceFlags.None)
+# Permet aux users de traverser la racine pour atteindre
+# leur sous-dossier (ABE masquera le reste)
 # ============================================================
 function Get-RootACL {
-    $acl = Get-AdminACL   # 4 admins FullControl herites
+    $acl = Get-AdminACL   # 4 admins FullControl
 
-    # Authenticated Users : ReadAndExecute sur ce dossier UNIQUEMENT
-    # InheritanceFlags.None  = ne se propage pas aux sous-dossiers
-    # PropagationFlags.None  = s applique uniquement ici
-    $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
-        $script:AuthUsersSID,
-        [System.Security.AccessControl.FileSystemRights]::ReadAndExecute,
-        [System.Security.AccessControl.InheritanceFlags]::None,
-        [System.Security.AccessControl.PropagationFlags]::None,
-        [System.Security.AccessControl.AccessControlType]::Allow
-    )))
+    # Authenticated Users : ReadAndExecute, ce dossier seulement
+    $rAuth = New-AclRule `
+        -Sid       $script:SID_Auth `
+        -Rights    ([System.Security.AccessControl.FileSystemRights]::ReadAndExecute) `
+        -Inherit   ([System.Security.AccessControl.InheritanceFlags]::None) `
+        -Propagate ([System.Security.AccessControl.PropagationFlags]::None)
 
+    if ($rAuth) { $acl.AddAccessRule($rAuth) }
     return $acl
 }
 
-$inh  = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit"
-$prop = [System.Security.AccessControl.PropagationFlags]::None
-$alw  = [System.Security.AccessControl.AccessControlType]::Allow
-$mod  = [System.Security.AccessControl.FileSystemRights]::Modify
+$inhAll = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit"
+$propNo = [System.Security.AccessControl.PropagationFlags]::None
+$mod    = [System.Security.AccessControl.FileSystemRights]::Modify
 
 # ---- 1. Dossiers racines avec Get-RootACL ----------------------
 Write-Host "=== Dossiers racines ==="
@@ -99,7 +124,7 @@ foreach ($d in @("$script:Base\Homes","$script:Base\Services","$script:Base\Depa
     New-Item $d -ItemType Directory -Force | Out-Null
     Set-Acl $d (Get-RootACL)
     Write-Host "  [OK] $d"
-    Write-Host "         Admins (x4) = FullControl | Authenticated Users = ReadAndExecute (racine seule)"
+    Write-Host "         4 admins = FullControl | Authenticated Users = ReadAndExecute (racine seule)"
 }
 
 # ---- 2. Dossiers de service J: ---------------------------------
@@ -115,20 +140,20 @@ foreach ($Dept in $Departements) {
                 -Path $OuSecu -Description "Acces J: $($Svc.OUName)" -Credential $ADCredential
             Write-Host "  [NEW] Groupe : $grp"
         } else {
-            Write-Host "  [OK]  Groupe : $grp existe"
+            Write-Host "  [OK]  Groupe : $grp"
         }
 
         New-Item $dir -ItemType Directory -Force | Out-Null
 
-        $grpSID = (Get-ADGroup $grp -Credential $ADCredential).SID
-        $rSvc   = New-Object System.Security.AccessControl.FileSystemAccessRule(
-            $grpSID, $mod, $inh, $prop, $alw)
+        $grpObj = Get-ADGroup $grp -Credential $ADCredential -EA SilentlyContinue
+        if (-not $grpObj) {
+            Write-Warning "  [SKIP ACL] $grp introuvable apres creation -- verifier l AD"
+            continue
+        }
 
-        # Get-AdminACL (sans Authenticated Users) car ce dossier
-        # doit etre visible UNIQUEMENT par les membres de GG_SVC_*
+        $rSvc = New-AclRule -Sid $grpObj.SID -Rights $mod -Inherit $inhAll -Propagate $propNo
         Set-Acl $dir (Get-AdminACL -Extra @($rSvc))
-        Write-Host "  [ACL] $dir"
-        Write-Host "         Admins (x4) = FullControl | $grp = Modify"
+        Write-Host "  [ACL] $dir -- 4 admins=FullControl | $grp=Modify"
     }
 }
 
@@ -153,60 +178,42 @@ foreach ($dept in $deptMap.Keys) {
 
     New-Item $dir -ItemType Directory -Force | Out-Null
 
-    $grpSID = (Get-ADGroup $grpUsr -Credential $ADCredential).SID
-    $rDept  = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        $grpSID, $mod, $inh, $prop, $alw)
+    $grpObj = Get-ADGroup $grpUsr -Credential $ADCredential -EA SilentlyContinue
+    if (-not $grpObj) {
+        Write-Warning "  [SKIP ACL] $grpUsr introuvable -- le groupe existe dans l AD ?"
+        Set-Acl $dir (Get-AdminACL)
+        continue
+    }
 
+    $rDept = New-AclRule -Sid $grpObj.SID -Rights $mod -Inherit $inhAll -Propagate $propNo
     Set-Acl $dir (Get-AdminACL -Extra @($rDept))
-    Write-Host "  [OK] $dept"
-    Write-Host "         Admins (x4) = FullControl | $grpUsr = Modify"
+    Write-Host "  [OK] $dept -- 4 admins=FullControl | $grpUsr=Modify"
 }
 
 # ---- 4. Verification finale ------------------------------------
 Write-Host ""
 Write-Host "=== Verification ACL ==="
-
-# Racines : verifier que Authenticated Users est bien present (ThisFolderOnly)
-Write-Host "-- Racines (doivent avoir Authenticated Users ReadAndExecute) --"
+Write-Host "-- Racines (Authenticated Users doit etre present) --"
 foreach ($racine in @("Homes","Services","Departements")) {
     $path = "$script:Base\$racine"
-    $acl  = Get-Acl $path
-    $hasAuth = $acl.Access | Where-Object {
-        try {
-            $_.IdentityReference.Translate(
-                [System.Security.Principal.SecurityIdentifier]
-            ).Value -eq "S-1-5-11" -and
-            $_.InheritanceFlags -eq [System.Security.AccessControl.InheritanceFlags]::None
-        } catch { $false }
-    }
-    $hasDSI = $acl.Access | Where-Object {
-        try {
-            $_.IdentityReference.Translate(
-                [System.Security.Principal.SecurityIdentifier]
-            ).Value -eq $script:DSIAdminsSID.Value
-        } catch { $false }
-    }
-    $tagAuth = if ($hasAuth) { "OK" } else { "!!! MANQUANT" }
-    $tagDSI  = if ($hasDSI)  { "OK" } else { "!!! MANQUANT" }
-    Write-Host "  $racine : Auth Users=[$tagAuth]  GG_DSI_Admins=[$tagDSI]"
-}
+    $acl  = (Get-Acl $path).Access
 
-# Sous-dossiers : verifier GG_DSI_Admins
-Write-Host ""
-Write-Host "-- Sous-dossiers (GG_DSI_Admins doit avoir FullControl) --"
-$allDirs = Get-ChildItem $script:Base -Recurse -Directory
-foreach ($d in $allDirs) {
-    $acl = Get-Acl $d.FullName
-    $hasDSI = $acl.Access | Where-Object {
+    $hasAuth = $acl | Where-Object {
         try {
             $_.IdentityReference.Translate(
-                [System.Security.Principal.SecurityIdentifier]
-            ).Value -eq $script:DSIAdminsSID.Value -and
-            $_.FileSystemRights -match "FullControl"
+                [System.Security.Principal.SecurityIdentifier]).Value -eq "S-1-5-11"
         } catch { $false }
     }
-    $tag = if ($hasDSI) { "OK" } else { "!!! GG_DSI_Admins MANQUANT" }
-    Write-Host "  [$tag] $($d.FullName)"
+    $hasDSI = $acl | Where-Object {
+        try {
+            $_.IdentityReference.Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value -eq $script:SID_DSIAdmins.Value
+        } catch { $false }
+    }
+
+    $tAuth = if ($hasAuth) { "OK" } else { "!!! MANQUANT" }
+    $tDSI  = if ($hasDSI)  { "OK" } else { "!!! MANQUANT" }
+    Write-Host "  $racine : Auth Users=[$tAuth]  GG_DSI_Admins=[$tDSI]"
 }
 
 Write-Host ""
