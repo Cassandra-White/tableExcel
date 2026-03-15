@@ -15,7 +15,7 @@ function Log($msg) {
 # -- Detection de l OS ----------------------------------------
 $os = Get-CimInstance Win32_OperatingSystem
 Log "=== Installation RSAT -- $($os.Caption) ==="
-Log "    $env:COMPUTERNAME -- $env:USERNAME"
+Log "  $env:COMPUTERNAME -- $env:USERNAME"
 Log ""
 
 $isServer  = $os.Caption -match "Server"
@@ -32,14 +32,14 @@ if ($isServer) {
     Log "=== Mode Windows Server -- Add-WindowsFeature ==="
 
     $features = @(
-        @{ Name="RSAT-AD-Tools";            Desc="Outils AD DS et AD LDS (ensemble complet)" },
-        @{ Name="RSAT-AD-AdminCenter";      Desc="Centre d admin Active Directory" },
-        @{ Name="RSAT-ADDS-Tools";          Desc="Outils AD DS (Users & Computers, Sites...)" },
-        @{ Name="RSAT-AD-PowerShell";       Desc="Module PowerShell ActiveDirectory" },
-        @{ Name="RSAT-DNS-Server";          Desc="Outils DNS" },
-        @{ Name="RSAT-DHCP";               Desc="Outils DHCP" },
-        @{ Name="RSAT-GP-Tools";           Desc="Gestion des strategies de groupe (GPMC)" },
-        @{ Name="RSAT-File-Services";      Desc="Outils services de fichiers" },
+        @{ Name="RSAT-AD-Tools"; Desc="Outils AD DS et AD LDS (ensemble complet)" },
+        @{ Name="RSAT-AD-AdminCenter"; Desc="Centre d admin Active Directory" },
+        @{ Name="RSAT-ADDS-Tools"; Desc="Outils AD DS (Users & Computers, Sites...)" },
+        @{ Name="RSAT-AD-PowerShell"; Desc="Module PowerShell ActiveDirectory" },
+        @{ Name="RSAT-DNS-Server"; Desc="Outils DNS" },
+        @{ Name="RSAT-DHCP"; Desc="Outils DHCP" },
+        @{ Name="RSAT-GP-Tools"; Desc="Gestion des strategies de groupe (GPMC)" },
+        @{ Name="RSAT-File-Services"; Desc="Outils services de fichiers" },
     )
 
     $ok = 0; $err = 0; $deja = 0
@@ -58,7 +58,7 @@ if ($isServer) {
         try {
             $r = Add-WindowsFeature -Name $f.Name -IncludeManagementTools -EA Stop
             if ($r.Success) {
-                Log "  [OK]   $($f.Name) -- $($f.Desc)"
+                Log "  [OK] $($f.Name) -- $($f.Desc)"
                 $ok++
             } else {
                 Log "  [ERR]  $($f.Name) -- echec sans exception"
@@ -73,7 +73,7 @@ if ($isServer) {
     Log ""
     Log "=== Bilan Server : $ok installes | $deja deja presents | $err erreurs ==="
     if ($ok -gt 0) {
-        Log "    Redemarrage recommande si les outils ne s affichent pas"
+        Log "  Redemarrage recommande si les outils ne s affichent pas"
     }
 }
 
@@ -97,12 +97,12 @@ else {
     Log ""
 
     $caps = @(
-        @{ Name="Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0";   Desc="AD DS / LDS Tools + module PS" },
-        @{ Name="Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0";   Desc="Gestion des GPO (GPMC)" },
-        @{ Name="Rsat.Dns.Tools~~~~0.0.1.0";                      Desc="Outils DNS" },
-        @{ Name="Rsat.DHCP.Tools~~~~0.0.1.0";                     Desc="Outils DHCP" },
-        @{ Name="Rsat.FileServices.Tools~~~~0.0.1.0";             Desc="Outils services de fichiers" },
-        @{ Name="Rsat.RemoteDesktop.Services.Tools~~~~0.0.1.0";   Desc="Outils Bureau a distance" },
+        @{ Name="Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0"; Desc="AD DS / LDS Tools + module PS" },
+        @{ Name="Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0"; Desc="Gestion des GPO (GPMC)" },
+        @{ Name="Rsat.Dns.Tools~~~~0.0.1.0"; Desc="Outils DNS" },
+        @{ Name="Rsat.DHCP.Tools~~~~0.0.1.0"; Desc="Outils DHCP" },
+        @{ Name="Rsat.FileServices.Tools~~~~0.0.1.0"; Desc="Outils services de fichiers" },
+        @{ Name="Rsat.RemoteDesktop.Services.Tools~~~~0.0.1.0"; Desc="Outils Bureau a distance" },
     )
 
     $ok = 0; $err = 0; $deja = 0
@@ -121,7 +121,7 @@ else {
         Log "  [...]  Installation : $($c.Desc)"
         try {
             Add-WindowsCapability -Online -Name $c.Name -EA Stop | Out-Null
-            Log "  [OK]   $($c.Desc)"
+            Log "  [OK] $($c.Desc)"
             $ok++
         } catch {
             Log "  [ERR]  $($c.Desc) -- $_"
@@ -142,10 +142,10 @@ try {
     Log "  [OK] Module charge -- domaine detecte : $dom"
 } catch {
     Log "  [ERR] Module AD non fonctionnel apres installation : $_"
-    Log "        Solutions possibles :"
-    Log "          1. Redemarrer le poste et relancer le test"
-    Log "          2. Verifier que le PC est bien joint au domaine billu.local"
-    Log "          3. Sur client sans Internet : monter l ISO Windows et pointer DISM"
+    Log "  Solutions possibles :"
+    Log "  1. Redemarrer le poste et relancer le test"
+    Log "  2. Verifier que le PC est joint au domaine billu.local"
+    Log "  3. Sans Internet : monter l ISO Windows et pointer DISM"
 }
 
 Log ""
